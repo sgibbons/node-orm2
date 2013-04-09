@@ -13,6 +13,9 @@ common.isTravis = function() {
 };
 
 common.createConnection = function(cb) {
+	if (this.protocol() == "mongodb") {
+		ORM.settings.set("properties.primary_key", "_id");
+	}
 	ORM.connect(this.getConnectionString(), cb);
 };
 
@@ -55,6 +58,12 @@ common.getConnectionString = function () {
 				       '/' + (config.database || 'orm_test');
 			case 'sqlite':
 				return 'sqlite://' + (config.pathname || "");
+			case 'mongodb':
+				return 'mongodb://' +
+				       (config.user ? config.user : "") +
+				       (config.password ? ':' + config.password : '') +
+				       '@' + (config.host || 'localhost') +
+				       '/' + (config.database || 'test');
 			default:
 				throw new Error("Unknown protocol");
 		}
@@ -79,9 +88,11 @@ common.createModelTable = function (table, db, cb) {
 				db.run("CREATE TABLE " + table + " (id INTEGER NOT NULL, name VARCHAR(100) NOT NULL, PRIMARY KEY(id))", cb);
 			});
 			break;
-		default:
+		case "mysql":
 			db.query("CREATE TEMPORARY TABLE " + table + " (id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(100) NOT NULL)", cb);
 			break;
+		case "mongodb":
+			return cb();
 	}
 };
 
@@ -96,9 +107,11 @@ common.createModel2Table = function (table, db, cb) {
 				db.run("CREATE TEMPORARY TABLE " + table + " (id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, assoc_id BIGINT NOT NULL)", cb);
 			});
 			break;
-		default:
+		case "mysql":
 			db.query("CREATE TEMPORARY TABLE " + table + " (id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(100) NOT NULL, assoc_id BIGINT NOT NULL)", cb);
 			break;
+		case "mongodb":
+			return cb();
 	}
 };
 
@@ -113,9 +126,11 @@ common.createModelAssocTable = function (table, assoc, db, cb) {
 				db.run("CREATE TABLE " + table + "_" + assoc + " (" + table + "_id INTEGER NOT NULL, " + assoc + "_id INTEGER NOT NULL, extra_field INTEGER)", cb);
 			});
 			break;
-		default:
+		case "mysql":
 			db.query("CREATE TEMPORARY TABLE " + table + "_" + assoc + " (" + table + "_id BIGINT NOT NULL, " + assoc + "_id BIGINT NOT NULL, extra_field BIGINT)", cb);
 			break;
+		case "mongodb":
+			return cb();
 	}
 };
 
@@ -138,13 +153,25 @@ common.insertModelData = function (table, db, data, cb) {
 			var pending = data.length;
 			for (i = 0; i < data.length; i++) {
 				db.run("INSERT INTO " + table + " VALUES (" + data[i].id + ", '" + data[i].name + "')", function () {
-					pending -= 1;
-
-					if (pending === 0) {
+					if (--pending === 0) {
 						return cb();
 					}
 				});
 			}
+			break;
+		case "mongodb":
+			db.collection(table, function (err, col) {
+				var pending = data.length;
+				for (i = 0; i < data.length; i++) {
+					(function (row) {
+						col.insert({ _id : row.id, name: row.name }, { safe : true }, function (err) {
+							if (--pending === 0) {
+								return cb();
+							}
+						});
+					})(data[i]);
+				}
+			});
 			break;
 	}
 };

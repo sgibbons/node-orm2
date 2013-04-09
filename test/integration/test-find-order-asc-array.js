@@ -15,8 +15,8 @@ common.createConnection(function (err, db) {
 				assert.equal(err, null);
 				assert.equal(Array.isArray(Instances), true);
 				assert.equal(Instances.length, 2);
-				assert.equal(Instances[0].id, 2);
-				assert.equal(Instances[1].id, 1);
+				assert.equal(Instances[0][TestModel.id], 2);
+				assert.equal(Instances[1][TestModel.id], 1);
 				db.close();
 			});
 		});
